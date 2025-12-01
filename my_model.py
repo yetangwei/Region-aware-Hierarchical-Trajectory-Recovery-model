@@ -6,6 +6,7 @@ from torchvision import transforms
 import torch.nn.functional as F
 
 
+
 class Date2VecConvert:
     def __init__(self, dim, model_path):
         self.model = Date2Vec(k=dim)
@@ -99,15 +100,6 @@ class add_time_embedding(nn.Module):
 class LSTM_gps(nn.Module):
     def __init__(self, args):
         super(LSTM_gps, self).__init__()
-        self.args = args
-        self.embedding = nn.Linear(2, args.d_model)
-        self.lstm = nn.LSTM(input_size=args.d_model,
-                            hidden_size=args.d_model,
-                            num_layers=3,
-                            batch_first=True,
-                            bidirectional=False)
-        self.norm = nn.LayerNorm(args.d_model)
-        self.fc = nn.Linear(args.d_model, args.d_model)
 
     def forward(self, input_ids):
         # input_ids: [B, L]
@@ -121,15 +113,6 @@ class LSTM_gps(nn.Module):
 class LSTM_gps_t(nn.Module):
     def __init__(self, args):
         super(LSTM_gps_t, self).__init__()
-        self.args = args
-        self.embedding = nn.Linear(2, args.d_model)
-        self.lstm = nn.LSTM(input_size=args.d_model,
-                            hidden_size=args.d_model,
-                            num_layers=3,
-                            batch_first=True,
-                            bidirectional=False)
-        self.norm = nn.LayerNorm(args.d_model)
-        self.fc = nn.Linear(args.d_model, args.d_model)
 
     def forward(self, input_ids):
         # input_ids: [B, L]
@@ -147,11 +130,6 @@ class TransformerEncoderLayer(nn.Module):
     def __init__(self, embed_dim, num_heads, dropout):
         super().__init__()
         self.attn = nn.MultiheadAttention(embed_dim, num_heads, batch_first=True)
-        self.ffn = nn.Sequential(
-            nn.Linear(embed_dim, embed_dim * 4),
-            nn.ReLU(),
-            nn.Linear(embed_dim * 4, embed_dim)
-        )
         self.norm1 = nn.LayerNorm(embed_dim)
         self.norm2 = nn.LayerNorm(embed_dim)
         self.dropout = nn.Dropout(dropout)
@@ -185,20 +163,6 @@ class ddgam_trans(nn.Module):
             x = layer(x, key, value)
         return x
 
-
-def create_2d_sinusoidal_encoding(H, W, d_model=256, temperature=5000.0, device=None, dtype=None):
-    assert d_model % 4 == 0
-    device = device or torch.device('cpu')
-    dtype = dtype or torch.float32
-    y = torch.arange(H, device=device, dtype=dtype).unsqueeze(1)
-    x = torch.arange(W, device=device, dtype=dtype).unsqueeze(1)
-    dim_t = temperature ** (torch.arange(d_model // 4, device=device, dtype=dtype) * 4.0 / d_model)
-    pe = torch.zeros(H, W, d_model, device=device, dtype=dtype)
-    pe[..., 0::4] = torch.sin(y / dim_t)[:, None, :]
-    pe[..., 1::4] = torch.cos(y / dim_t)[:, None, :]
-    pe[..., 2::4] = torch.sin(x / dim_t)[None, :, :]
-    pe[..., 3::4] = torch.cos(x / dim_t)[None, :, :]
-    return pe
 
 class LearnablePositionalEncoding(nn.Module):
     def __init__(self, H=100, W=100, d_model=256):
@@ -239,7 +203,7 @@ class MultiScaleDeformGrid(nn.Module):
         self.deform0 = DeformStage(in_channels=D, out_channels=D, kernel_size=7, offset_scale=4)
         self.conv1_out = torch.nn.Conv2d(
             in_channels=D,
-            out_channels=D,  # 2 * kernel_size * kernel_size
+            out_channels=D,  
             kernel_size=3,
             padding=1
         )
@@ -248,7 +212,7 @@ class MultiScaleDeformGrid(nn.Module):
         self.deform1 = DeformStage(in_channels=D, out_channels=D, kernel_size=5, offset_scale=2)
         self.conv2_out = torch.nn.Conv2d(
             in_channels=D,
-            out_channels=D,  # 2 * kernel_size * kernel_size
+            out_channels=D, 
             kernel_size=3,
             padding=1
         )
@@ -257,7 +221,7 @@ class MultiScaleDeformGrid(nn.Module):
         self.deform2 = DeformStage(in_channels=D, out_channels=D, kernel_size=3, offset_scale=1)
         self.conv3_out = torch.nn.Conv2d(
             in_channels=D,
-            out_channels=D,  # 2 * kernel_size * kernel_size
+            out_channels=D, 
             kernel_size=3,
             padding=1
         )
@@ -305,11 +269,6 @@ class MultiScaleDeformGrid(nn.Module):
         pe1 = self.position_encoding1()
         pe2 = self.position_encoding2()
 
-
-        # E0, out_0 = self._to_id_embed(out_0)
-        # E1, out_1 = self._to_id_embed(out_1)
-        # E2, out_2 = self._to_id_embed(out_2)
-
         E0, out_0 = self._to_id_embed_l(out_0, pe0)
         E1, out_1 = self._to_id_embed_l(out_1, pe1)
         E2, out_2 = self._to_id_embed_l(out_2, pe2)
@@ -317,14 +276,14 @@ class MultiScaleDeformGrid(nn.Module):
         return E0, out_0, offset_0, E1, out_1, offset_1, E2, out_2, offset_2
 
 
-class HierDDGAM(nn.Module):
+class RHTR(nn.Module):
     def __init__(self, args):
         super().__init__()
         self.args = args
         self.G = args.grid_num
         self.D = args.hidden_emb_dim
 
-        # 多尺度编码器
+
         self.encoder = MultiScaleDeformGrid(args)
 
         self.grid_mask_token = nn.Parameter(torch.randn(self.D))
@@ -409,20 +368,12 @@ class HierDDGAM(nn.Module):
 
         feat_f = self.cross_f(q_cm, kv_f, kv_f)
 
-        logits_c = self.head_c(feat_c)  # [B,Lp,S_c^2]
-        logits_m = self.head_m(feat_m)  # [B,Lp,S_m^2]
-        logits_f = self.head_f(feat_f)  # [B,Lp,G^2]
-        delta_f  = self.delta_f(feat_f) # [B,Lp,2]
+        logits_c = self.head_c(feat_c)  
+        logits_m = self.head_m(feat_m)  
+        logits_f = self.head_f(feat_f)  
+        delta_f  = self.delta_f(feat_f) 
 
         return feat_c, feat_m, feat_f, logits_c, logits_m, logits_f, delta_f
 
 
 
-
-
-
-
-
-
-
-    
