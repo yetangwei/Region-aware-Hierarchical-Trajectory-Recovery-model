@@ -1,12 +1,9 @@
-from turtle import distance
 import torch
 import torch.nn as nn
 import numpy as np
 import math
 from torchvision import transforms
-from torchvision.ops import deform_conv2d
 import torch.nn.functional as F
-from torchvision.ops import DeformConv2d
 
 
 class Date2VecConvert:
